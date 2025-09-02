@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "tsx server.ts",
     "dev": "tsx server.ts",
-    "vercel-build": "npm run build"
+    "vercel-build": "echo 'Vercel handles TypeScript compilation for API functions'"
   },
   "keywords": [
     "youtube",
