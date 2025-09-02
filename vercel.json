@@ -7,6 +7,14 @@
   },
   "rewrites": [
     {
+      "source": "/api/streams/(.*)",
+      "destination": "/api/streams/$1"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/health"
+    },
+    {
       "source": "/(.*)",
       "destination": "/api/index"
     }
