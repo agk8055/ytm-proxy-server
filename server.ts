@@ -7,6 +7,28 @@ import { request } from 'undici';
 
 const app = Fastify({ logger: true });
 
+// Root endpoint
+app.get('/', async (req, reply) => {
+  return reply.send({
+    message: 'YouTube Music Proxy Server',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      streams: '/api/streams/:id'
+    }
+  });
+});
+
+// Health endpoint
+app.get('/api/health', async (req, reply) => {
+  return reply.send({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Helper: pick the best audio-only format with a direct URL
 function pickAudioFormat(info: ytdl.videoInfo) {
   const formats = info.formats
@@ -15,7 +37,7 @@ function pickAudioFormat(info: ytdl.videoInfo) {
   return formats[0] || null;
 }
 
-app.get('/v1/streams/:id', async (req, reply) => {
+app.get('/api/streams/:id', async (req, reply) => {
   const { id } = req.params as { id: string };
 
   try {
