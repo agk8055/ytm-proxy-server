@@ -1,0 +1,2 @@
+# This file ensures the public directory is tracked by git
+# This directory is required by Vercel even for API-only projects
