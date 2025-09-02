@@ -81,6 +81,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Pipe the stream to response
     ytdlStream.pipe(res);
+    
+    // Return undefined since we're streaming the response
+    return;
 
   } catch (err) {
     console.error('Stream error:', err);
