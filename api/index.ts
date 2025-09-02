@@ -5,8 +5,8 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     message: 'YouTube Music Proxy Server',
     version: '1.0.0',
     endpoints: {
-      health: '/health',
-      streams: '/v1/streams/:id'
+      health: '/api/health',
+      streams: '/api/streams/:id'
     }
   });
 }
