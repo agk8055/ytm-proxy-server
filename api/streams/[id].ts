@@ -1,44 +1,12 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import ytdl from '@distube/ytdl-core';
 import { request } from 'undici';
-import * as fs from 'fs';
 
-// Monkey-patch fs operations to prevent debug file writing
-const originalWriteFileSync = fs.writeFileSync;
-const originalWriteFile = fs.writeFile;
-const originalOpenSync = fs.openSync;
+// Set environment variables before importing ytdl-core
+process.env.YTDL_NO_UPDATE = 'true';
+process.env.TMPDIR = '/tmp';
 
-// Use type assertion to bypass TypeScript readonly restrictions
-(fs as any).writeFileSync = function(path: any, data: any, options?: any) {
-  // Block any attempts to write debug files
-  if (typeof path === 'string' && (path.includes('watch.html') || path.includes('.html'))) {
-    console.log('Blocked debug file write:', path);
-    return;
-  }
-  // Allow other file writes to proceed
-  return originalWriteFileSync.call(this, path, data, options);
-};
-
-(fs as any).writeFile = function(path: any, data: any, options?: any, callback?: any) {
-  // Block any attempts to write debug files
-  if (typeof path === 'string' && (path.includes('watch.html') || path.includes('.html'))) {
-    console.log('Blocked debug file write:', path);
-    if (callback) callback(null);
-    return;
-  }
-  // Allow other file writes to proceed
-  return originalWriteFile.call(this, path, data, options, callback);
-};
-
-(fs as any).openSync = function(path: any, flags?: any, mode?: any) {
-  // Block any attempts to open debug files for writing
-  if (typeof path === 'string' && (path.includes('watch.html') || path.includes('.html'))) {
-    console.log('Blocked debug file open:', path);
-    throw new Error('Debug file writing blocked');
-  }
-  // Allow other file operations to proceed
-  return originalOpenSync.call(this, path, flags, mode);
-};
+// Import ytdl-core after setting environment variables
+import ytdl from '@distube/ytdl-core';
 
 // Array of realistic user agents to rotate
 const USER_AGENTS = [
@@ -68,10 +36,6 @@ function pickAudioFormat(info: ytdl.videoInfo) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Configure for read-only filesystem environment
-  process.env.YTDL_NO_UPDATE = 'true';
-  process.env.TMPDIR = '/tmp';
-  
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -99,19 +63,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // 1) Resolve formats/URL with proper headers to avoid bot detection
     const userAgent = getRandomUserAgent();
-    const info = await ytdl.getInfo(id, {
-      requestOptions: {
-        headers: {
-          'User-Agent': userAgent,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'DNT': '1',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1',
+    
+    let info;
+    try {
+      info = await ytdl.getInfo(id, {
+        requestOptions: {
+          headers: {
+            'User-Agent': userAgent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+          }
         }
+      });
+    } catch (fsError: any) {
+      // Handle filesystem errors specifically
+      if (fsError.code === 'EROFS' || fsError.message.includes('read-only file system')) {
+        console.log('Filesystem error caught, retrying with different approach...');
+        // Try again with minimal options
+        info = await ytdl.getInfo(id);
+      } else {
+        throw fsError;
       }
-    });
+    }
     const fmt = pickAudioFormat(info);
 
     // 2) If a direct, public URL exists, 302 redirect to it (fast path)
@@ -140,22 +117,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Create ytdl stream with proper headers
-    const ytdlStream = ytdl(id, {
-      filter: 'audioonly',
-      quality: 'highestaudio',
-      requestOptions: { 
-        headers: {
-          'User-Agent': userAgent,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'DNT': '1',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1',
-          ...(rangeHeader ? { Range: rangeHeader } : {})
+    let ytdlStream;
+    try {
+      ytdlStream = ytdl(id, {
+        filter: 'audioonly',
+        quality: 'highestaudio',
+        requestOptions: { 
+          headers: {
+            'User-Agent': userAgent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            ...(rangeHeader ? { Range: rangeHeader } : {})
+          }
         }
+      });
+    } catch (fsError: any) {
+      // Handle filesystem errors specifically
+      if (fsError.code === 'EROFS' || fsError.message.includes('read-only file system')) {
+        console.log('Filesystem error in stream creation, retrying with minimal options...');
+        // Try again with minimal options
+        ytdlStream = ytdl(id, {
+          filter: 'audioonly',
+          quality: 'highestaudio'
+        });
+      } else {
+        throw fsError;
       }
-    });
+    }
 
     // Handle stream errors
     ytdlStream.on('error', (error) => {
