@@ -1,6 +1,44 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import ytdl from '@distube/ytdl-core';
 import { request } from 'undici';
+import * as fs from 'fs';
+
+// Monkey-patch fs operations to prevent debug file writing
+const originalWriteFileSync = fs.writeFileSync;
+const originalWriteFile = fs.writeFile;
+const originalOpenSync = fs.openSync;
+
+// Use type assertion to bypass TypeScript readonly restrictions
+(fs as any).writeFileSync = function(path: any, data: any, options?: any) {
+  // Block any attempts to write debug files
+  if (typeof path === 'string' && (path.includes('watch.html') || path.includes('.html'))) {
+    console.log('Blocked debug file write:', path);
+    return;
+  }
+  // Allow other file writes to proceed
+  return originalWriteFileSync.call(this, path, data, options);
+};
+
+(fs as any).writeFile = function(path: any, data: any, options?: any, callback?: any) {
+  // Block any attempts to write debug files
+  if (typeof path === 'string' && (path.includes('watch.html') || path.includes('.html'))) {
+    console.log('Blocked debug file write:', path);
+    if (callback) callback(null);
+    return;
+  }
+  // Allow other file writes to proceed
+  return originalWriteFile.call(this, path, data, options, callback);
+};
+
+(fs as any).openSync = function(path: any, flags?: any, mode?: any) {
+  // Block any attempts to open debug files for writing
+  if (typeof path === 'string' && (path.includes('watch.html') || path.includes('.html'))) {
+    console.log('Blocked debug file open:', path);
+    throw new Error('Debug file writing blocked');
+  }
+  // Allow other file operations to proceed
+  return originalOpenSync.call(this, path, flags, mode);
+};
 
 // Array of realistic user agents to rotate
 const USER_AGENTS = [
