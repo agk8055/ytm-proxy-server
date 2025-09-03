@@ -68,8 +68,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userAgent = getRandomUserAgent();
     
     let info;
-    try {
-      info = await ytdl.getInfo(id, {
+    // Try multiple approaches in sequence
+    const approaches = [
+      // Approach 1: Full headers
+      () => ytdl.getInfo(id, {
         requestOptions: {
           headers: {
             'User-Agent': userAgent,
@@ -85,31 +87,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             'Cache-Control': 'max-age=0',
           }
         }
-      });
-    } catch (fsError: any) {
-      // Handle filesystem errors specifically
-      if (fsError.code === 'EROFS' || fsError.message.includes('read-only file system')) {
-        console.log('Filesystem error caught, retrying with different approach...');
-        // Try again with minimal options but still include headers
-        info = await ytdl.getInfo(id, {
-          requestOptions: {
-            headers: {
-              'User-Agent': userAgent,
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-              'Accept-Language': 'en-US,en;q=0.9',
-              'Accept-Encoding': 'gzip, deflate, br',
-              'DNT': '1',
-              'Connection': 'keep-alive',
-              'Upgrade-Insecure-Requests': '1',
-              'Sec-Fetch-Dest': 'document',
-              'Sec-Fetch-Mode': 'navigate',
-              'Sec-Fetch-Site': 'none',
-              'Cache-Control': 'max-age=0',
-            }
+      }),
+      // Approach 2: Minimal headers
+      () => ytdl.getInfo(id, {
+        requestOptions: {
+          headers: {
+            'User-Agent': userAgent,
           }
-        });
-      } else {
-        throw fsError;
+        }
+      }),
+      // Approach 3: No options at all
+      () => ytdl.getInfo(id)
+    ];
+
+    for (let i = 0; i < approaches.length; i++) {
+      try {
+        console.log(`Trying approach ${i + 1}...`);
+        info = await approaches[i]();
+        console.log(`Approach ${i + 1} succeeded!`);
+        break;
+      } catch (error: any) {
+        console.log(`Approach ${i + 1} failed:`, error.message);
+        if (i === approaches.length - 1) {
+          // If all approaches fail, throw the last error
+          throw error;
+        }
       }
     }
     const fmt = pickAudioFormat(info);
@@ -139,10 +141,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.setHeader('Content-Range', rangeHeader);
     }
 
-    // Create ytdl stream with proper headers
+    // Create ytdl stream with multiple fallback approaches
     let ytdlStream;
-    try {
-      ytdlStream = ytdl(id, {
+    const streamApproaches = [
+      // Approach 1: Full headers
+      () => ytdl(id, {
         filter: 'audioonly',
         quality: 'highestaudio',
         requestOptions: { 
@@ -161,34 +164,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ...(rangeHeader ? { Range: rangeHeader } : {})
           }
         }
-      });
-    } catch (fsError: any) {
-      // Handle filesystem errors specifically
-      if (fsError.code === 'EROFS' || fsError.message.includes('read-only file system')) {
-        console.log('Filesystem error in stream creation, retrying with minimal options...');
-        // Try again with minimal options but still include headers
-        ytdlStream = ytdl(id, {
-          filter: 'audioonly',
-          quality: 'highestaudio',
-          requestOptions: { 
-            headers: {
-              'User-Agent': userAgent,
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-              'Accept-Language': 'en-US,en;q=0.9',
-              'Accept-Encoding': 'gzip, deflate, br',
-              'DNT': '1',
-              'Connection': 'keep-alive',
-              'Upgrade-Insecure-Requests': '1',
-              'Sec-Fetch-Dest': 'document',
-              'Sec-Fetch-Mode': 'navigate',
-              'Sec-Fetch-Site': 'none',
-              'Cache-Control': 'max-age=0',
-              ...(rangeHeader ? { Range: rangeHeader } : {})
-            }
+      }),
+      // Approach 2: Minimal headers
+      () => ytdl(id, {
+        filter: 'audioonly',
+        quality: 'highestaudio',
+        requestOptions: { 
+          headers: {
+            'User-Agent': userAgent,
+            ...(rangeHeader ? { Range: rangeHeader } : {})
           }
-        });
-      } else {
-        throw fsError;
+        }
+      }),
+      // Approach 3: No options at all
+      () => ytdl(id, {
+        filter: 'audioonly',
+        quality: 'highestaudio'
+      })
+    ];
+
+    for (let i = 0; i < streamApproaches.length; i++) {
+      try {
+        console.log(`Trying stream approach ${i + 1}...`);
+        ytdlStream = streamApproaches[i]();
+        console.log(`Stream approach ${i + 1} succeeded!`);
+        break;
+      } catch (error: any) {
+        console.log(`Stream approach ${i + 1} failed:`, error.message);
+        if (i === streamApproaches.length - 1) {
+          // If all approaches fail, throw the last error
+          throw error;
+        }
       }
     }
 
