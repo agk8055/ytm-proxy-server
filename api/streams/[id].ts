@@ -30,6 +30,10 @@ function pickAudioFormat(info: ytdl.videoInfo) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Configure for read-only filesystem environment
+  process.env.YTDL_NO_UPDATE = 'true';
+  process.env.TMPDIR = '/tmp';
+  
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
