@@ -13,7 +13,10 @@ const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+  // Android user agents that might work better
+  'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
 ];
 
 // Get a random user agent
@@ -76,6 +79,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0',
           }
         }
       });
@@ -83,8 +90,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Handle filesystem errors specifically
       if (fsError.code === 'EROFS' || fsError.message.includes('read-only file system')) {
         console.log('Filesystem error caught, retrying with different approach...');
-        // Try again with minimal options
-        info = await ytdl.getInfo(id);
+        // Try again with minimal options but still include headers
+        info = await ytdl.getInfo(id, {
+          requestOptions: {
+            headers: {
+              'User-Agent': userAgent,
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Accept-Encoding': 'gzip, deflate, br',
+              'DNT': '1',
+              'Connection': 'keep-alive',
+              'Upgrade-Insecure-Requests': '1',
+              'Sec-Fetch-Dest': 'document',
+              'Sec-Fetch-Mode': 'navigate',
+              'Sec-Fetch-Site': 'none',
+              'Cache-Control': 'max-age=0',
+            }
+          }
+        });
       } else {
         throw fsError;
       }
@@ -131,6 +154,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0',
             ...(rangeHeader ? { Range: rangeHeader } : {})
           }
         }
@@ -139,10 +166,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Handle filesystem errors specifically
       if (fsError.code === 'EROFS' || fsError.message.includes('read-only file system')) {
         console.log('Filesystem error in stream creation, retrying with minimal options...');
-        // Try again with minimal options
+        // Try again with minimal options but still include headers
         ytdlStream = ytdl(id, {
           filter: 'audioonly',
-          quality: 'highestaudio'
+          quality: 'highestaudio',
+          requestOptions: { 
+            headers: {
+              'User-Agent': userAgent,
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Accept-Encoding': 'gzip, deflate, br',
+              'DNT': '1',
+              'Connection': 'keep-alive',
+              'Upgrade-Insecure-Requests': '1',
+              'Sec-Fetch-Dest': 'document',
+              'Sec-Fetch-Mode': 'navigate',
+              'Sec-Fetch-Site': 'none',
+              'Cache-Control': 'max-age=0',
+              ...(rangeHeader ? { Range: rangeHeader } : {})
+            }
+          }
         });
       } else {
         throw fsError;
