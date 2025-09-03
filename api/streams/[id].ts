@@ -1,9 +1,11 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { request } from 'undici';
+import path from 'path';
+import os from 'os';
 
 // Set environment variables before importing ytdl-core
 process.env.YTDL_NO_UPDATE = 'true';
-process.env.TMPDIR = '/tmp';
+process.env.TMPDIR = path.join(os.tmpdir(), 'ytm-proxy-server');
 
 // Import ytdl-core after setting environment variables
 import ytdl from '@distube/ytdl-core';
